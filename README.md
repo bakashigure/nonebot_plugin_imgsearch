@@ -1,0 +1,2 @@
+# nonebot_plugin_imgsearch
+nonebot2插件，在saucenao与ascii2d中搜索这张图并返回结果
