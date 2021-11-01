@@ -24,7 +24,6 @@ class SauceNao:
         self.raw = "" #每次搜索的原始数据
 
     def __new__(cls, *a, **k):
-        """搞点单例"""
         if not cls.__instance:
             cls.__instance = super().__new__(cls, *a, **k)
         return cls.__instance
