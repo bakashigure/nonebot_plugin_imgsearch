@@ -1,34 +1,34 @@
 # -*- coding:utf-8 -*-
-import io
 import json
 import re
 from collections import OrderedDict
 
 import httpx
-from PIL import Image, ImageFile
-
+from loguru import logger
 from .response import *
 
 Response = BaseResponse
+
 
 class SauceNao:
     """ # SauceNAO search moudle #"""
 
     __instance = None
 
-    def __init__(self,proxy) -> None:
-        self.log = "" #每次搜索后更新本次日志
-        self.short_remaing = 0 #每次搜索后更新30s剩余次数
-        self.long_remaing = 0 #每次搜索后更新24h剩余次数
-        self.proxy = proxy # 魔法
-        self.raw = "" #每次搜索的原始数据
+    def __init__(self, saucenao_api: str, proxy: None) -> None:
+        self.log = ""  # 每次搜索后更新本次日志
+        self.short_remaing = 0  # 每次搜索后更新30s剩余次数
+        self.long_remaing = 0  # 每次搜索后更新24h剩余次数
+        self.proxy = proxy  # 魔法
+        self.raw = ""  # 每次搜索的原始数据
+        self.saucenao_api_key = saucenao_api
 
     def __new__(cls, *a, **k):
         if not cls.__instance:
-            cls.__instance = super().__new__(cls, *a, **k)
+            cls.__instance = super().__new__(cls)
         return cls.__instance
 
-    async def saucenao_search(self, file_path: str, APIKEY: str) -> "Response":
+    async def search(self, url: str) -> "Response":
         """ # SauceNAO search moudle #
         在SauceNAO中搜索这张图, 采用api模式而非网页解析, 所以你需要先去SauceNAO注册一个APIKEY
 
@@ -56,26 +56,41 @@ class SauceNao:
         """
         bitmask_all = '999'  # 搜索saucenao全部index
         default_minsim = '75!'  # 最小匹配相似度
-        ImageFile.LOAD_TRUNCATED_IMAGES = True  # qq有时候拿到的是烂图, 不完整的
+        #ImageFile.LOAD_TRUNCATED_IMAGES = True  # qq有时候拿到的是烂图, 不完整的
+        client = httpx.AsyncClient(proxies=None)
+        
+        
+        for i in range(3):
+            try:
+                img = (await client.get(url)).content
+                await client.aclose()
+                break
+            except httpx.ReadTimeout:
+                logger.warning(f"SauceNAO: 请求超时, 尝试次数 {i}")
+        else:
+            return Response(ACTION_FAILED,message="图片下载失败, 请检查网络是否通畅.")
+            
+        '''
         image = Image.open(file_path)
         image = image.convert('RGB')
+        
         thumbSize = (250, 250)
         image.thumbnail(thumbSize, resample=Image.ANTIALIAS)
         imageData = io.BytesIO()
         image.save(imageData, format='PNG')
+        '''
 
-        url_all = 'http://saucenao.com/search.php?output_type=2&numres=1&minsim=' + default_minsim + '&db=' + \
-            bitmask_all + '&api_key=' + APIKEY
-        files = {'file': (file_path, imageData.getvalue())}
-        imageData.close()
+        url_all = 'http://saucenao.com/search.php?output_type=2&numres=1&minsim=' + default_minsim + '&db=' + bitmask_all + '&api_key=' + self.saucenao_api_key
+        files = {'file': ('img.jpeg', img,'image/jpeg')}
+        #imageData.close()
         r = None
         try:
             async with httpx.AsyncClient(proxies=self.proxy) as client:
-                r = await client.post(url=url_all, files=files)
+                r = await client.post(url=url_all, files=files,follow_redirects=True)
         except httpx.ProxyError:
-            return Response(status=ACTION_FAILED, message="代理错误, 请检查代理")
+            return Response(ACTION_FAILED, message="代理错误, 请检查代理")
         except httpx.ReadTimeout:
-            return Response(status=ACTION_FAILED, message="请求超时, 请检查网络, 或者是SauceNAO暂时无法访问")
+            return Response(ACTION_FAILED, message="请求超时, 请检查网络, 或者是SauceNAO暂时无法访问")
 
         if r.status_code != 200:
             if r.status_code == 403:
@@ -89,29 +104,28 @@ class SauceNao:
                 _remain_searches = 'Remaining Searches 30s|24h: ' + \
                     str(results['header']['short_remaining']) + \
                     '|' + str(results['header']['long_remaining'])
-                #print(_remain_searches)
+                # print(_remain_searches)
                 self.short_remaing = results['header']['short_remaining']
                 self.long_remaing = results['header']['long_remaining']
                 if int(results['header']['status']) == 0:
                     ...
                 else:
                     if int(results['header']['status']) > 0:
-                        return Response(ACTION_FAILED, "SauceNAO服务器部分索引出现问题, 请稍后再试")
+                        return Response(ACTION_FAILED, message="SauceNAO服务器部分索引出现问题, 请稍后再试")
                     else:
-                        return Response(ACTION_FAILED, "图片无法读取或其他请求错误")
+                        return Response(ACTION_FAILED, message="图片无法读取或其他请求错误")
             else:
-                return Response(ACTION_FAILED, "图片无法读取或API错误")
+                return Response(ACTION_FAILED, message="图片无法读取或API错误")
 
             found_json = {'index': "", 'rate': "", 'data': {}}
             if int(results['header']['results_returned']) > 0:
                 artwork_url = ""
-                #print(results)
+                # print(results)
                 self.raw = results
                 rate = results['results'][0]['header']['similarity']+'%'
                 # one or more results were returned
                 if float(results['results'][0]['header']['similarity']) > float(results['header']['minimum_similarity']):
-                    print('hit! ' + str(results['results']
-                                        [0]['header']['similarity']))
+                    #print('hit! ' + str(results['results'][0]['header']['similarity']))
 
                     illust_id = 0
                     member_id = -1
@@ -136,14 +150,14 @@ class SauceNao:
                         title = _data['title']
                         artwork_url = f"https://pixiv.net/artworks/{illust_id}"
                         found_json['data'] = {
-                            "title": title, "illust_id": illust_id, "member_name": member_name, "url": artwork_url}
+                            "title": title, "illust": illust_id, "author": member_name, "artwork": artwork_url}
                     elif index_id == 8:
                         # 8->nico nico seiga
                         found_json['index'] = 'seiga'
                         member_id = _data['member_id']
                         illust_id = _data['seiga_id']
                         found_json['data'] = {
-                            "member_id": member_id, "illust_id": illust_id}
+                            "author": member_id, "illust": illust_id}
                     elif index_id == 9:
                         # 9 -> danbooru
                         # index name, danbooru_id, gelbooru_id, creator, material, characters, sources
@@ -178,7 +192,7 @@ class SauceNao:
                         source = _data['source']
                         found_json['data'] = {
                             "creator": creator, "characters": characters, "source": source}
-                    
+
                     elif index_id == 13:
                         # 13 -> konachan
                         # ext_urls, konachan_id, creator, material, characters, source

@@ -1,15 +1,7 @@
 # -*- coding:utf-8 -*-
-# Modified from https://github.com/kitUIN/PicImageSearch/blob/main/PicImageSearch/ascii2d.py
-# Created by bakashigure
-from typing import Coroutine
-from bs4 import BeautifulSoup
-from requests_toolbelt import MultipartEncoder
 import httpx
-from response import *
-from typing import Coroutine
-import asyncio
-
-
+from bs4 import BeautifulSoup
+from .response import *
 
 class SingleRes():
     def __init__(self, title=None, title_url=None, author=None, author_url=None,thumb_url=None):
@@ -22,12 +14,17 @@ class SingleRes():
 
 
 class Ascii2D:
+    """ Ascii2D search module
     """
+    __instance = None
 
-    """
+    def __init__(self,proxy=None):
+        self.proxy = proxy
 
-    def __init__(self, **requests_kwargs):
-        self.requests_kwargs = requests_kwargs
+    def __new__(cls, *a, **k):
+        if not cls.__instance:
+            cls.__instance = super().__new__(cls)
+        return cls.__instance
 
     def parse_html(self, data: httpx.Response) -> "list":
         soup = BeautifulSoup(data.text, 'html.parser')
@@ -48,18 +45,24 @@ class Ascii2D:
             text = f"titile:[{title}]({title_url})\nauther:[{author}]({author_url})"
         return results
 
-    async def search(self, url):
-
-        client = httpx.AsyncClient(proxies="http://127.0.0.1:7890")
-        # color_res = await client.post("https://ascii2d.net/search/multi", files=files)
-        color_response = await client.get("https://ascii2d.net/search/url/"+url)
-        print(color_response.url)
-        bovw_url = color_response.url.__str__().replace("/color/", "/bovw/")
-        bovw_response = await client.get(bovw_url)
-        await client.aclose()
-        color_results = self.parse_html(color_response)
-        bovw_results = self.parse_html(bovw_response)
+    async def search(self, url) -> "BaseResponse":
+        try:
+            client = httpx.AsyncClient(proxies=self.proxy,follow_redirects=True)
+            # color_res = await client.post("https://ascii2d.net/search/multi", files=files)
+            color_response = await client.get("https://ascii2d.net/search/url/"+url,follow_redirects=True)
+            #print(color_response.url)
+            bovw_url = color_response.url.__str__().replace("/color/", "/bovw/")
+            bovw_response = await client.get(bovw_url)
+            color_results = self.parse_html(color_response)
+            bovw_results = self.parse_html(bovw_response)
+            color_results[1].thumbnail = (await client.get(color_results[1].thumbnail_url)).content
+            bovw_results[1].thumbnail = (await client.get(bovw_results[1].thumbnail_url)).content
         #res = requests.post(ASCII2DURL, headers=headers, data=m, verify=False, **self.requests_kwargs)
+            await client.aclose()
+        except httpx.ReadTimeout:
+            return BaseResponse(ACTION_FAILED,message="链接超时, 请检查网络是否通畅")
+        except httpx.ProxyError:
+            return BaseResponse(ACTION_FAILED,message="连接代理服务器出现错误, 请检查代理设置")
 
         if color_results[0].title:
             single = color_results[0]
@@ -70,30 +73,10 @@ class Ascii2D:
             single = bovw_results[0]
             return BaseResponse(ACTION_SUCCESS, "get direct result from ascii2d bovw", {'index': "ascii2d特征检索", 'title': single.title, 'url': single.title_url})
         else:
+
             return BaseResponse(ACTION_WARNING, "get possible results from ascii2d", [
-                {'index': "ascii2d颜色检索",  'title': color_results[1].title, 'title_url': color_results[1].title_url,
-                "author":color_results[1].author,"author_url":color_results[1].author_url}, color_results[1].thumbnail_url,
+                {'[ ascii2d': " 颜色检索 ]",  'title': color_results[1].title, 'title_url': color_results[1].title_url,
+                "author":color_results[1].author,"author_url":color_results[1].author_url}, color_results[1].thumbnail,
                 
-                {'index': "ascii2d特征检索",  'title': bovw_results[1].title, 'url': bovw_results[1].title_url,
-                "author":bovw_results[1].author,"author_url":bovw_results[1].author_url}, bovw_results[1].thumbnail_url])
-
-
-
-def sync(coroutine: Coroutine):
-    """
-    同步执行异步函数，使用可参考 [同步执行异步代码](https://www.moyu.moe/bilibili-api/#/sync-executor)
-
-    Args:
-        coroutine (Coroutine): 异步函数
-
-    Returns:
-        该异步函数的返回值
-    """
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(coroutine)
-
-"""
-asc = Ascii2D()
-res = sync(asc.search("https://gchat.qpic.cn/gchatpic_new/1142580641/830606346-3201629122-9F46B66B93B5CF7712D7FD28D90CEB0B/0?term=3"))
-print(res.content)
-"""
+                {'[ ascii2d': " 特征检索 ]",  'title': bovw_results[1].title, 'url': bovw_results[1].title_url,
+                "author":bovw_results[1].author,"author_url":bovw_results[1].author_url}, bovw_results[1].thumbnail])
