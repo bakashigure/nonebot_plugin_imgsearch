@@ -4,7 +4,7 @@
 
 <div align="center">
 
-# nonebot-plugin-docs
+# nonebot-plugin-imgsearch
 
 _✨ NoneBot2 图片搜索插件 ✨_
 
