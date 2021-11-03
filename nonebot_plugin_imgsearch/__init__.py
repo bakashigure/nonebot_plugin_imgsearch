@@ -9,19 +9,16 @@ from .saucenao import SauceNao
 from .utils import get_message_image
 from .config import search_proxy, saucenao_api_key
 
+logger.warning(f"PROXY: {search_proxy}")
+logger.warning(f"S_API: {saucenao_api_key}")
 Search = on_command('search')
 
 
 def have_image(images: list) -> bool:
     return len(images) > 0
 
-
-if not saucenao_api_key:
-    logger.error("没有设置saucenao_api_key，插件无法正常工作.")
-
 saucenao = SauceNao(saucenao_api_key, search_proxy)
 ascii2d = Ascii2D(search_proxy)
-
 
 @Search.handle()
 async def search(bot: Bot, event: Event, state: T_State):

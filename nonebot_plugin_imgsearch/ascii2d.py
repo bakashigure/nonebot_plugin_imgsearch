@@ -14,8 +14,7 @@ class SingleRes():
 
 
 class Ascii2D:
-    """ Ascii2D search module
-    """
+    """ # Ascii2D search moudle #"""
     __instance = None
 
     def __init__(self,proxy=None):
@@ -29,7 +28,6 @@ class Ascii2D:
     def parse_html(self, data: httpx.Response) -> "list":
         soup = BeautifulSoup(data.text, 'html.parser')
         results = []
-        # 找到class="wrap"的div里面的所有<img>标签
         for img in soup.find_all('div', attrs={'class': 'row item-box'}):
             img_url = "https://ascii2d.net" + str(img.img['src'])
             the_list = img.find_all('a')
@@ -41,14 +39,14 @@ class Ascii2D:
             author = str(the_list[1].get_text())
             author_url = str(the_list[1]["href"])
             results.append(SingleRes(title, title_url, author, author_url,img_url))
-            #photo_file = session.get(img_url)
-            text = f"titile:[{title}]({title_url})\nauther:[{author}]({author_url})"
         return results
 
-    async def search(self, url) -> "BaseResponse":
+    async def search(self, url: str) -> "BaseResponse":
         try:
             client = httpx.AsyncClient(proxies=self.proxy,follow_redirects=True)
             # color_res = await client.post("https://ascii2d.net/search/multi", files=files)
+            
+            # 既然ascii2d能传图片url, 那就直接丢给它好了！
             color_response = await client.get("https://ascii2d.net/search/url/"+url,follow_redirects=True)
             #print(color_response.url)
             bovw_url = color_response.url.__str__().replace("/color/", "/bovw/")

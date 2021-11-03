@@ -2,10 +2,12 @@
 import json
 import re
 from collections import OrderedDict
-
+from PIL import Image
+from io import BytesIO
 import httpx
 from loguru import logger
 from .response import *
+from .utils import compress_image
 
 Response = BaseResponse
 
@@ -22,6 +24,8 @@ class SauceNao:
         self.proxy = proxy  # 魔法
         self.raw = ""  # 每次搜索的原始数据
         self.saucenao_api_key = saucenao_api
+        if not self.saucenao_api_key:
+            raise Exception("没有设置saucenao_api_key，插件无法正常工作")
 
     def __new__(cls, *a, **k):
         if not cls.__instance:
@@ -66,31 +70,29 @@ class SauceNao:
                 await client.aclose()
                 break
             except httpx.ReadTimeout:
-                logger.warning(f"SauceNAO: 请求超时, 尝试次数 {i}")
+                logger.warning(f"SauceNAO: 下载qq图片超时, 尝试次数 {i+1}/3")
         else:
+            await client.aclose()
             return Response(ACTION_FAILED,message="图片下载失败, 请检查网络是否通畅.")
             
-        '''
-        image = Image.open(file_path)
-        image = image.convert('RGB')
         
-        thumbSize = (250, 250)
-        image.thumbnail(thumbSize, resample=Image.ANTIALIAS)
-        imageData = io.BytesIO()
-        image.save(imageData, format='PNG')
-        '''
-
         url_all = 'http://saucenao.com/search.php?output_type=2&numres=1&minsim=' + default_minsim + '&db=' + bitmask_all + '&api_key=' + self.saucenao_api_key
-        files = {'file': ('img.jpeg', img,'image/jpeg')}
-        #imageData.close()
+        files = {'file': ('img.jpeg', compress_image(img),'image/jpeg')}
         r = None
-        try:
-            async with httpx.AsyncClient(proxies=self.proxy) as client:
-                r = await client.post(url=url_all, files=files,follow_redirects=True)
-        except httpx.ProxyError:
-            return Response(ACTION_FAILED, message="代理错误, 请检查代理")
-        except httpx.ReadTimeout:
-            return Response(ACTION_FAILED, message="请求超时, 请检查网络, 或者是SauceNAO暂时无法访问")
+
+        for i in range(3):
+            try:
+                async with httpx.AsyncClient(proxies=self.proxy) as client:
+                    r = await client.post(url=url_all, files=files,follow_redirects=True)
+                break
+            except httpx.ProxyError as e:
+                logger.warning(f"SauceNAO: 代理错误, 尝试次数 {i+1}/3 {e}")
+            except httpx.ReadTimeout as e:
+                logger.warning(f"SauceNAO: 下载图片超时, 尝试次数 {i+1}/3 {e}")
+            except httpx.ConnectError as e:
+                logger.warning(f"SauceNAO: 连接错误, 请检查网络. 尝试次数 {i+1}/3 {e}")
+        else:
+            return Response(ACTION_FAILED,message="向SauceNAO请求失败")
 
         if r.status_code != 200:
             if r.status_code == 403:

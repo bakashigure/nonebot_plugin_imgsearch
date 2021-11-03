@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nonebot-plugin-imgsearch"
-version = "0.1.1"
+version = "0.1.2"
 description = "A image search plugin for nonebot2"
 authors = ["bakashigure <bakashigure@hotmail.com>"]
 readme="README.md"
