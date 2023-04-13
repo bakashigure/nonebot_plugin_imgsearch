@@ -1,4 +1,10 @@
 # -*- coding: utf-8 -*-
 from nonebot import get_driver
-search_proxy = get_driver().config.search_proxy
-saucenao_api_key = get_driver().config.saucenao_api_key
+
+config_dict = get_driver().config.dict()
+
+search_proxy = None
+if 'search_proxy' in config_dict:
+    search_proxy = config_dict['saucenao_api_key']
+
+saucenao_api_key = config_dict['saucenao_api_key']

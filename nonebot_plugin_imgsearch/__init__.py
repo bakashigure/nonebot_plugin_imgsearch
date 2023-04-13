@@ -1,6 +1,6 @@
 from nonebot import on_command
 from nonebot.adapters import Bot, Event
-from nonebot.adapters.cqhttp import MessageSegment
+from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.log import logger
 from nonebot.typing import T_State
 
